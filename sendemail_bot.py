@@ -155,12 +155,17 @@ async def init_app():
     app.router.add_get('/', handle)
     return app
 
-async def main() -> None:
+async def run_bot(application: Application):
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+
+async def main():
     ensure_single_instance()
     
     await asyncio.sleep(5)  # Подождать 5 секунд перед запуском
 
-    # Create and run the Telegram bot application
+    # Create the Telegram bot application
     application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
 
     conv_handler = ConversationHandler(
@@ -177,11 +182,6 @@ async def main() -> None:
 
     application.add_handler(conv_handler)
 
-    # Инициализация и запуск бота
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-
     # Запуск веб-сервера
     app = await init_app()
     runner = web.AppRunner(app)
@@ -189,8 +189,12 @@ async def main() -> None:
     site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 5000)))
     await site.start()
 
+    # Запуск бота
+    await run_bot(application)
+
     # Держим приложение запущенным
-    await application.run_polling()
+    while True:
+        await asyncio.sleep(3600)  # Спим 1 час
 
 if __name__ == '__main__':
     asyncio.run(main())
