@@ -2,6 +2,9 @@ import os
 import re
 import smtplib
 import logging
+import asyncio
+import fcntl
+import sys
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -10,7 +13,6 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
 from dotenv import load_dotenv
 from aiohttp import web
-import asyncio
 
 # Загрузка переменных окружения из .env файла
 load_dotenv()
@@ -20,6 +22,16 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 # Conversation stages
 EMAIL, SUBJECT, NAME, ATTACHMENT = range(4)
+
+def ensure_single_instance():
+    """Ensure that only one instance of the script is running."""
+    global lock_file
+    lock_file = open("/tmp/sendemail_bot.lock", "w")
+    try:
+        fcntl.lockf(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        print("Another instance is already running. Exiting.")
+        sys.exit(1)
 
 # Function to send an email
 def send_email(subject, body, to_email, attachment=None):
@@ -143,7 +155,11 @@ async def init_app():
     app.router.add_get('/', handle)
     return app
 
-def main() -> None:
+async def main() -> None:
+    ensure_single_instance()
+    
+    await asyncio.sleep(5)  # Подождать 5 секунд перед запуском
+
     # Create and run the Telegram bot application
     application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
 
@@ -161,12 +177,20 @@ def main() -> None:
 
     application.add_handler(conv_handler)
 
-    # Run the Telegram bot
-    asyncio.create_task(application.run_polling())
+    # Инициализация и запуск бота
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
 
-    # Run the web server
-    app = asyncio.run(init_app())
-    web.run_app(app, port=int(os.getenv('PORT', 5000)))
+    # Запуск веб-сервера
+    app = await init_app()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 5000)))
+    await site.start()
+
+    # Держим приложение запущенным
+    await application.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
