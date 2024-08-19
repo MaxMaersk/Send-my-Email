@@ -10,7 +10,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
 from dotenv import load_dotenv
 from aiohttp import web
 
@@ -155,7 +155,7 @@ async def init_app():
     app.router.add_get('/', handle)
     return app
 
-async def run_bot(application: Application):
+async def run_bot(application):
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
@@ -165,8 +165,12 @@ async def main():
     
     await asyncio.sleep(5)  # Подождать 5 секунд перед запуском
 
-    # Create the Telegram bot application
-    application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
+    # Create the Telegram bot application with JobQueue
+    application = (
+        ApplicationBuilder()
+        .token(os.getenv("TELEGRAM_TOKEN"))
+        .build()
+    )
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
